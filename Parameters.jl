@@ -68,7 +68,7 @@ include("SCDP/SCDP/src/constantes_physiques.jl")
 	global M_limit_1 = 2*pi
 	global M_limit_lat = 2*pi
 	global M_limit_long = 2*pi
-	global time_zero_simulation = DatetoJD(2000,1,1,12,0,0)#1970
+	global time_zero_simulation = date_to_jd(2000,1,1,12,0,0)#1970
 	
 # Compute Theta and alpha of a satellite
 	global Theta_min = ((2*pi*dt)/(2*PERIOD_SAT_MIN))*1.2
@@ -117,9 +117,9 @@ include("SCDP/SCDP/src/constantes_physiques.jl")
 	Latitude = [30.1289733044805, 11.202345525890758] *pi/180
 	Longitude = [21.921097190662763, 134.10212177710707]*pi/180 
 	coordsCibles = [SA[Latitude[i], Longitude[i]] for i in 1:nbCibles]
-	n_0 = 12
-	nbMaxSat = 2
-	inst = DonneesSCDP(coordsCibles,alphaHalf,nbMaxSat,SatelliteToolbox.DateTime(1970, 1, 1, 0),1,n_0)
+	n_0 = 2
+	nbMaxSat = 4
+	inst = DonneesSCDP(coordsCibles,alphaHalf,nbMaxSat, SatelliteToolbox.DateTime(1970, 1, 1, 0),1,n_0,dt)
 	# inst = instanceAleatoire(nbCibles,alphaHalf,nbMaxSat,SatelliteToolbox.DateTime(1970, 1, 1, 0),1,n_0)
 	# save("instances/instance_Revisit_"*string(Int(TEMPS_SIMU/(3600*n_0)))*"_cibles_"*string(nbCibles)*".jld2", "inst", inst)
 	ecrireInst(inst)

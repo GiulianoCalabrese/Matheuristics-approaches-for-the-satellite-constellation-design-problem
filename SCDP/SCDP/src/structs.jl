@@ -91,16 +91,16 @@ mutable struct DonneesSCDP
    de la Terre, correspondant aux zones vu par un satellite à deux instants successif, se 
    superposent de 100p %. 
    """
-   function DonneesSCDP(coordsCibles, angleOuverture, nbMaxSat, instantInitial, m_simu, n_0, p = 0.2)
+   function DonneesSCDP(coordsCibles, angleOuverture, nbMaxSat, instantInitial, m_simu, n_0, dt, p = 0.2)
 
 	  nbCibles = length(coordsCibles)
 	  # nbMaxSat = nbCibles*n_0 
 	  n_min = ceil(Int, (m_simu*T_terre*√(μ/a_max^3))/(2π))
 	  n_max = floor(Int, (m_simu*T_terre*√(μ/a_min^3))/(2π))
 	  
-	  nbInstants = Int(T_terre/(n_0*180)) #calculNbIntants(m_simu, n_0, angleOuverture, n_max, p)
+	  nbInstants = Int(T_terre/(n_0*dt)) #calculNbIntants(m_simu, n_0, angleOuverture, n_max, p)
 	  dt = (T_terre*m_simu)/(nbInstants*n_0)
-	  ts = LinRange(0, m_simu*T_terre, nbInstants*n_0 + 1)
+	  ts = LinRange(0, m_simu*T_terre, Int(nbInstants*n_0 + 1))
 
 	  instantInitialJulian = datetime2julian(instantInitial) 
 	  mats_ECI_ECEF = 

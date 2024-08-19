@@ -10,23 +10,24 @@ export resoudre_SCDP, Conste, GrpSat, GrpType, instanceAleatoire, ecrireInst,
        ecrireIndiv, ecrirePop, DonneesSCDP,
        ecrireIntervallesSurvol, dessinerIntervallesSurvol, dessinerConsteECI!,
        dessinerSolECEF!, extraireDeConsteFixe, extraireDeConsteVar, 
-       consteFixe2Conste, consteVar2Conste
+       consteFixe2Conste, consteVar2Conste, Discretization, ProjSatPlotPOLARDominique,
+       CreateSfera, CreateEquatorialPlane, PolarToCartesian, CountRevisitTime,
+       Validation,Observability,GraphicalValidation,getCardinalKeplerianParam,
+       ExtractKepParamFromINDEX, getCoverageSat, getHyperMatrix
+
+export alphaHalf, theta_min
 
 using NSGAII 
 using LinearAlgebra
 using StaticArrays
 using Dates
 using SatelliteToolbox
-using Random 
-using Plots 
+using Random  
 using PrettyTables
 using StatsBase
+using PyPlot
 
-import ColorSchemes.darkrainbow
-
-# Backend pour les plots 
-pyplot()
-# plotlyjs()
+#import ColorSchemes.darkrainbow
 
 # newaxis
 na = [CartesianIndex()]
@@ -157,59 +158,6 @@ end
 
 # *** Test de resoudre_NSGAII ***
 # Vérification avec SatelliteToolbox
-if false
 
-   # conste = [true, 13, 1.57080, 1.88495, 0.94248, 
-   #          false, 0, 0, 0, 0, 
-   #          true, 16, 0.3, 0.8, 0.1,  
-   #          true, 15, 0.4, 0.3, 0.13, 
-   #          false, 0, 0, 0, 0, 
-   #          false, 0, 0, 0, 0, 
-   #          false, 0, 0, 0, 0, 
-   #          true, 0.466, 0.6, 0.144, 0.78]
-
-   coordsCibles = [SA[0, 0], SA[0, π/2], SA[0, π], SA[0, -π/2]]
-   angleOuverture = π/6 
-   instantInitial = DateTime(2022, 3, 20, 12, 0)
-   m_simu = 1 
-   n_0 = 6 
-   Δ = 30 
-
-   inst = DonneesProb(coordsCibles, angleOuverture, instantInitial, m_simu, n_0, Δ)
-   ecrireInst(inst)
-
-   nbGen = 1
-   nbIndiv = 10
-
-   pop, _ = resoudre_NSGAII(inst, nbIndiv, nbGen)
-
-   # On trie la population finale selon le rang
-   # sort!(pop, by = ind -> ind.rank)
-
-   ecrirePop(inst, pop)
-   conste = pop[1].x.p
-   ecrireIntervallesNonSurvol(inst, conste)
-
-   # On récupère les paramètres orbitaux de chaque satellite actif de la constellation. 
-   nbMaxSat = inst.nbMaxSat
-   actifs = Bool.(conste[1:nbMaxSat])
-   nbSat = sum(actifs)
-   ns = conste[(nbMaxSat+1):(2nbMaxSat)][actifs]
-   as = @. (μ*(m_simu*T_terre/(2π*ns))^2)^(1/3)
-   is = conste[(2nbMaxSat+1):(3nbMaxSat)][actifs]
-   Ωs = conste[(3nbMaxSat+1):(4nbMaxSat)][actifs]
-   Ms = conste[(4nbMaxSat+1):(5nbMaxSat)][actifs]
-
-   # Propagateurs des satellites actifs 
-   props = init_orbit_propagator.(Val(:twobody), 
-      KeplerianElements.(inst.instantInitialJulian, as, 0, is, Ωs, 0, Ms))
-
-   angleElevation = @. π/2 - asin(as[1]*sin(inst.angleOuverture)/R_terre)
-
-   intervallesNonSurvol = ground_station_gaps(props[1], inst.coordsCiblesECEF[1], T_terre, TOD(), 
-                                              PEF(), θ = angleElevation)
-
-   intervallesNonSurvolSec = @. 1e-3*getfield(intervallesNonSurvol - instantInitial, :value)
-end
 
 

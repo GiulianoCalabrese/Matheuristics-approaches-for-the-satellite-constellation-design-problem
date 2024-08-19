@@ -299,6 +299,201 @@ référentiel ECEF au jour julien date.
 """
 function calcul_angle_ECI_ECEF(date::Real)
    mat_ECI_ECEF = r_eci_to_ecef(TOD(), PEF(), date)
-   return atan(mat_ECI_ECEF[2, 1], mat_ECI_ECEF[1, 1])
+   return atan(-mat_ECI_ECEF[2, 1], mat_ECI_ECEF[1, 1])
 end
 
+"""
+Renvoie la street of coverage du satellite en fonction de son plan orbitale.
+INPUT :  4 paramètres képleriens de 1 satellite
+OUTPUT : street of coverage en coordonnée polaires dans le temps
+"""
+function ProjSatPlotPOLARDominique(Altezza, inclinaison, noeudAscendant, meanAnomaly)
+
+   LatitudeSat = fill(0.0,NUM_TIME+1)
+   LongitudeSat = fill(0.0,NUM_TIME+1)
+   t_p = (sqrt(μ/(Altezza^3)))
+   t_u = sqrt(μ/(Altezza))
+   t_GM = sqrt(Altezza/μ)
+
+   for p in 1:(NUM_TIME+1)
+      
+      LatitudeSat[p] = asin(round(((sin(inclinaison)*Altezza*sin(meanAnomaly))*cos(t_p*((p-1)*dt))/Altezza) 
+      + ((sin(inclinaison)*t_u*cos(meanAnomaly))*sin(t_p*((p-1)*dt))*t_GM), digits=8))
+
+      LongitudeSat[p] = (-(calcul_angle_ECI_ECEF(time_zero_simulation) + (we*((p-1)*dt))) + 
+      atan((((sin(noeudAscendant)*Altezza*cos(meanAnomaly)) + (cos(noeudAscendant)*cos(inclinaison)*
+      Altezza*sin(meanAnomaly)))*cos(t_p*((p-1)*dt))/Altezza)	+ ((-(sin(noeudAscendant)*t_u*sin(meanAnomaly))
+      + (cos(noeudAscendant)*cos(inclinaison)*t_u*cos(meanAnomaly)))*sin(t_p*((p-1)*dt))*t_GM),
+      ((((cos(noeudAscendant)*Altezza*cos(meanAnomaly)) - (sin(noeudAscendant)*cos(inclinaison)*
+      Altezza*sin(meanAnomaly)))* cos(t_p*((p-1)*dt))/Altezza) + ((-(cos(noeudAscendant)*t_u*sin(meanAnomaly))
+      -(sin(noeudAscendant)*cos(inclinaison)*t_u*cos(meanAnomaly)))*sin((t_p*((p-1)*dt)))*t_GM))))%(2*pi)
+      
+      if LongitudeSat[p] <= 0 
+         LongitudeSat[p] += 2*pi
+      end
+   end
+
+   return LatitudeSat,LongitudeSat
+end
+
+"""
+Fonction qui permet la discretization d'un interval continu à discrétiser avec borne inf et sup en fonction d'un nombre de discrétisation à donner.
+INPUT : nombre d'éléements dans l'ensemble discret, borne inf et sup de l'interval 
+OUTPUT : ensemble discret de l'interval continu
+"""
+function Discretization(numbOfDiscretize,lowerBound,upperBound)
+   angle_discret = LinRange(lowerBound,upperBound,numbOfDiscretize)
+   return angle_discret
+end
+
+"""
+Obtenir coordonnées cartésiennes des polaires
+"""
+function PolarToCartesian(ρ,θ,ϕ)
+	# position of projection of satellite on Earth (ground track)
+	x = ρ*cos(ϕ)*sin(θ)
+	y = ρ*sin(ϕ)*sin(θ)
+	z = ρ*cos(θ)
+	return x,y,z
+end
+
+"""
+Coordonnées cartésiennes en 3D des points à surveiller périodiquement
+"""
+function generateTargetsCartesians(NUM_PIXEL)
+	
+	local x = fill(0.0, NUM_PIXEL)
+	local y = fill(0.0, NUM_PIXEL)
+	local z = fill(0.0, NUM_PIXEL)
+    
+	# https://mathworld.wolfram.com/SpherePointPicking.html
+	for i in 1:NUM_PIXEL
+		phi  = 2. * pi * rand()
+		csth = 1.0 - 2.0 * rand()
+		snth = sqrt(1.0 - csth*csth)
+		x[i]=R_terre * snth * cos(phi)
+		y[i]=R_terre * snth * sin(phi)
+		z[i]=R_terre * csth
+	end	
+	return x,y,z
+end
+
+"""
+Get hyper matrix with all the distance between sat anche target at each time step for eache possibl orbital
+"""
+function getHyperMatrix()
+
+	NbrTOTALsat,N_inclinaison,N_RAAN,N_meanAnomaly,InclinaisonSet,RAANSet,MeanAnomalySet = getCardinalKeplerianParam()
+
+	if !isfile("HyperMatrixLat_"*string(dt)*"sec_"*string(NUM_PIXEL)*"Targets.jld2")
+		CoverageSatLat = fill(0.0,NbrTOTALsat,NUM_TIME,NUM_PIXEL)
+		CoverageSatLong = fill(0.0,NbrTOTALsat,NUM_TIME,NUM_PIXEL)
+		Thetamax = zeros(NbrTOTALsat,NUM_TIME,NUM_PIXEL)
+		for j in 0:(altitudeLength-1)
+			for s in 0:(N_inclinaison-1)
+				for l in 0:(N_RAAN-1)
+					for k in 1:N_meanAnomaly
+						global lat_Sat,long_Sat = ProjSatPlotPOLARDominique(R_terre+altitudeSet[j+1], InclinaisonSet[s+1],
+						RAANSet[l+1], MeanAnomalySet[k])
+						for p in 1:NUM_TIME
+							for t in 1:NUM_PIXEL
+								CoverageSatLat[(k+(l*N_RAAN)+(s*N_RAAN*N_inclinaison)+(j*N_RAAN*N_inclinaison*N_meanAnomaly)),p,t] =
+									abs(Latitude[t] - lat_Sat[p])
+								CoverageSatLong[(k+(l*N_RAAN)+(s*N_RAAN*N_inclinaison)+(j*N_RAAN*N_inclinaison*N_meanAnomaly)),p,t] =
+									(abs(Longitude[t] - long_Sat[p])*cos(Latitude[t]))
+								Thetamax[(k+(l*N_RAAN)+(s*N_RAAN*N_inclinaison)+(j*N_RAAN*N_inclinaison*N_meanAnomaly)),p,t] = Theta[j+1]
+							end
+						end
+					end
+				end
+			end
+		end
+
+		save("HyperMatrixLat_"*string(dt)*"sec_"*string(NUM_PIXEL)*"Targets.jld2","CoverageSatLat",CoverageSatLat)
+		save("HyperMatrixLong_"*string(dt)*"sec_"*string(NUM_PIXEL)*"Targets.jld2","CoverageSatLong",CoverageSatLong)
+		save("HyperMatrixThetamax_"*string(dt)*"sec_"*string(NUM_PIXEL)*"Targets.jld2","Thetamax",Thetamax)
+	else
+		CoverageSatLat = load("HyperMatrixLat_"*string(dt)*"sec_"*string(NUM_PIXEL)*"Targets.jld2","CoverageSatLat")
+		CoverageSatLong = load("HyperMatrixLong_"*string(dt)*"sec_"*string(NUM_PIXEL)*"Targets.jld2","CoverageSatLong")
+		Thetamax = load("HyperMatrixThetamax_"*string(dt)*"sec_"*string(NUM_PIXEL)*"Targets.jld2","Thetamax")
+	end
+
+	return CoverageSatLat,CoverageSatLong,Thetamax
+end
+
+"""
+Get distance in lat and long from satellite to target for all time for a specific orbital indicated by INDEX. It give also ThetaMax the limit coverage of satellite.
+"""
+function getCoverageSat(INDEX,NUM_PIXEL,Latitude,Longitude)
+	IndexAltitude,Indexinclination,IndexRaan,IndexMeanAnom = ExtractKepParamFromINDEX(INDEX)
+	LenIndex = length(INDEX)
+	CoverageSatLat = fill(0.0,LenIndex,NUM_TIME,NUM_PIXEL)
+	CoverageSatLong = fill(0.0,LenIndex,NUM_TIME,NUM_PIXEL)
+	Thetamax = zeros(LenIndex,NUM_TIME,NUM_PIXEL)
+
+	for i in 1:LenIndex
+		lat_Sat,long_Sat = ProjSatPlotPOLARDominique(R_terre+altitudeSet[IndexAltitude[i]],InclinaisonSet[Indexinclination[i]],RAANSet[IndexRaan[i]],MeanAnomalySet[IndexMeanAnom[i]])
+		for p in 1:NUM_TIME
+			for t in 1:NUM_PIXEL
+				CoverageSatLat[i,p,t] =	abs(Latitude[t] - lat_Sat[p])
+				CoverageSatLong[i,p,t] = (abs(Longitude[t] - long_Sat[p])*cos(Latitude[t]))
+				Thetamax[i,p,t] = Theta[IndexAltitude[i]]
+			end
+		end
+	end
+
+	return CoverageSatLat,CoverageSatLong,Thetamax
+end
+
+"""
+Output all the Keplerian's set possible, the cardinality of the sets and the total number of possible orbitals
+"""
+function getCardinalKeplerianParam()
+
+	InclinaisonSet = Discretization(numbOfDiscretize,0.0,pi)
+	RAANSet = Discretization(numbOfDiscretize,0.0,2*pi)
+	MeanAnomalySet = Discretization(numbOfDiscretize,0.0,2*pi)
+	N_inclinaison = size(InclinaisonSet)[1]
+	N_RAAN = size(RAANSet)[1]
+	N_meanAnomaly = size(MeanAnomalySet)[1]
+	NbrTOTALsat = N_inclinaison*N_RAAN*N_meanAnomaly*altitudeLength
+
+	return NbrTOTALsat,N_inclinaison,N_RAAN,N_meanAnomaly,InclinaisonSet,RAANSet,MeanAnomalySet
+end
+
+"""
+From a i-est orbital indicated by INDEX, the function send the index of Kepelrrian's sets corresponding to the i-est orbital
+"""
+function ExtractKepParamFromINDEX(INDEX)
+
+	IndexMeanAnom = fill(1,length(INDEX))
+	IndexRaan = fill(1,length(INDEX))
+	Indexinclination = fill(1,length(INDEX))
+	IndexAltitude = fill(1,length(INDEX))
+	#AltProduct=N_meanAnomaly*N_RAAN*N_inclinaison
+	#IncProduct=N_meanAnomaly*N_RAAN
+
+	global indtemp = 0
+	for i in INDEX
+		global indtemp +=1
+		IndexMeanAnom[indtemp] = (i%N_meanAnomaly)
+		IndexAltitude[indtemp] = div(i,(N_meanAnomaly*N_RAAN*N_inclinaison)) + 1
+		Indexinclination[indtemp] = div((i-((IndexAltitude[indtemp]-1)*(N_meanAnomaly*N_RAAN*N_inclinaison))),
+											(N_meanAnomaly*N_RAAN)) + 1
+		IndexRaan[indtemp] = div((i-((IndexAltitude[indtemp]-1)*(N_meanAnomaly*N_RAAN*N_inclinaison))) -
+											(Indexinclination[indtemp]-1)*(N_meanAnomaly*N_RAAN),N_meanAnomaly) + 1
+		if IndexMeanAnom[indtemp]==0
+			IndexMeanAnom[indtemp]=N_meanAnomaly
+			IndexRaan[indtemp] -= 1
+		end
+
+		#if i != (((IndexAltitude[indtemp]-1)*AltProduct)+
+		#	((Indexinclination[indtemp]-1)*IncProduct)+
+		#	((IndexRaan[indtemp]-1)*N_meanAnomaly)+
+		#	IndexMeanAnom[indtemp])
+		#	println("ERROR to take Kep. params from INDEX (RMP.jl)")
+		#end
+	end
+
+	return IndexAltitude,Indexinclination,IndexRaan,IndexMeanAnom
+end
